@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tangkap Hatiku 💖</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="play.png" />
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      font-family: 'Quicksand', 'Comfortaa', cursive;
+      cursor: default;
+      background: linear-gradient(135deg, #ffb6c1, #ffd1dc, #ffe4e1);
+      background-size: 400% 400%;
+      animation: bgMove 10s ease infinite;
+    }
+
+    @keyframes bgMove {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .heart {
+      position: absolute;
+      font-size: 2rem;
+      animation: fall linear forwards;
+      user-select: none;
+      filter: drop-shadow(0 2px 4px rgba(255, 0, 100, 0.3));
+    }
+
+    @keyframes fall {
+      0% { transform: translateY(-60px) rotate(0deg); opacity: 0.9; }
+      100% { transform: translateY(105vh) rotate(360deg); opacity: 0.3; }
+    }
+
+    #player {
+      position: absolute;
+      bottom: 70px;
+      width: 100px;
+      height: 100px;
+      text-align: center;
+      font-size: 3.5rem;
+      line-height: 80px;
+      user-select: none;
+      cursor: grab;
+      transition: transform 0.15s ease;
+    }
+
+    #player:active {
+      cursor: grabbing;
+      transform: scale(1.1);
+    }
+
+    #score {
+      transition: transform 0.2s ease;
+    }
+
+    .score-pulse {
+      transform: scale(1.3);
+    }
+
+    #start-screen h1 {
+      text-shadow: 0 2px 8px rgba(255, 0, 128, 0.3);
+    }
+
+    #message-box {
+      background: white;
+      border-radius: 20px;
+      animation: fadeIn 0.8s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Responsif */
+    @media (max-width: 640px) {
+      #player { font-size: 2.5rem; width: 60px; height: 60px; bottom: 70px; }
+      #score { font-size: 1.5rem !important; }
+      #start-screen h1 { font-size: 2.5rem; }
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center">
+
+  <div id="start-screen" class="flex flex-col items-center justify-center h-screen text-center p-4">
+    <h2 class="text-3xl md:text-5xl font-bold text-pink-700 mb-6 animate-bounce">Tangkap Hatiku 💖</h2>
+    <div class="bg-white/50 backdrop-blur-sm p-3 rounded-lg shadow-md mb-8 max-w-xs">
+      <p class="text-sm md:text-base text-pink-800">🎯 Tangkap 30 hati yang jatuh dan kamu akan melihat pesan rahasianya!</p>
+    </div>
+    <button id="play-btn" class="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-10 py-3 rounded-full text-sm md:text-base font-semibold shadow-lg transition-all hover:scale-105">Mulai Bermain</button>
+  </div>
+
+  <div id="game-screen" class="hidden relative w-full h-screen overflow-hidden">
+    <div id="player">
+      <img src="basket.png" alt="Keranjang" class="w-full h-full object-contain">
+    </div>
+    <div id="score" class="absolute top-5 left-5 text-3xl text-pink-700 font-bold drop-shadow-md">❤️: 0</div>
+
+    <div id="message-container" class="hidden absolute inset-0 flex items-center justify-center bg-pink-100 bg-opacity-70 backdrop-blur-md">
+      <div id="message-box" class="text-center p-8 rounded-2xl shadow-2xl">
+        <p id="message-text" class="text-1xl md:text-2xl font-bold text-pink-800 mb-6"></p>
+        <button id="restart-btn" class="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white px-8 py-3 rounded-full text-sm md:text-base font-semibold shadow-lg transition-all hover:scale-105"></button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="bg-music" loop>
+    <source src="song.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    const playBtn = document.getElementById('play-btn');
+    const startScreen = document.getElementById('start-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const player = document.getElementById('player');
+    const scoreDisplay = document.getElementById('score');
+    const messageContainer = document.getElementById('message-container');
+    const messageText = document.getElementById('message-text');
+    const restartBtn = document.getElementById('restart-btn');
+    const bgMusic = document.getElementById('bg-music');
+
+    let score = 0;
+    const targetScore = 30;
+    let heartCreationInterval;
+    let gameLoopId;
+    let hearts = [];
+    let isDragging = false;
+    let isGameOver = false;
+
+    // --- Musik Fade In/Out ---
+    function fadeAudio(audio, targetVolume, duration) {
+      const startVolume = audio.volume;
+      const step = (targetVolume - startVolume) / (duration / 100);
+      const interval = setInterval(() => {
+        audio.volume = Math.min(Math.max(audio.volume + step, 0), 1);
+        if ((step > 0 && audio.volume >= targetVolume) || (step < 0 && audio.volume <= targetVolume)) {
+          clearInterval(interval);
+        }
+      }, 100);
+    }
+
+    // --- Gerakan Pemain ---
+    function movePlayer(clientX) {
+      const gameRect = gameScreen.getBoundingClientRect();
+      const playerWidth = player.offsetWidth;
+      let newX = clientX - gameRect.left - playerWidth / 2;
+      if (newX < 0) newX = 0;
+      if (newX > gameRect.width - playerWidth) newX = gameRect.width - playerWidth;
+      player.style.left = `${newX}px`;
+      player.style.transform = "scale(1.1)";
+      setTimeout(() => player.style.transform = "scale(1)", 150);
+    }
+
+    player.addEventListener('mousedown', () => { isDragging = true; });
+    document.addEventListener('mouseup', () => { isDragging = false; });
+    document.addEventListener('mousemove', (e) => { if (isDragging) movePlayer(e.clientX); });
+    player.addEventListener('touchstart', (e) => { isDragging = true; e.preventDefault(); }, { passive: false });
+    document.addEventListener('touchend', () => { isDragging = false; });
+    document.addEventListener('touchmove', (e) => { if (isDragging && e.touches.length > 0) movePlayer(e.touches[0].clientX); });
+
+    // --- Logika Game ---
+    function startGame() {
+      score = 0;
+      isGameOver = false;
+      updateScore();
+      messageContainer.classList.add('hidden');
+      hearts = [];
+      clearInterval(heartCreationInterval);
+      heartCreationInterval = setInterval(createHeart, 700);
+      cancelAnimationFrame(gameLoopId);
+      gameLoop();
+    }
+
+    function createHeart() {
+      if (isGameOver) return;
+      const heart = document.createElement('div');
+      heart.classList.add('heart');
+      const colors = ['💖', '💘', '💝', '💗', '💓'];
+      heart.innerHTML = colors[Math.floor(Math.random() * colors.length)];
+      heart.style.left = Math.random() * (window.innerWidth - 30) + 'px';
+      heart.style.animationDuration = (Math.random() * 2 + 3) + 's';
+      
+      heart.addEventListener('animationend', () => {
+        const heartIndex = hearts.indexOf(heart);
+        if (heartIndex > -1) {
+          hearts.splice(heartIndex, 1);
+          // ===== FUNGSI PENGURANGAN SKOR & KALAH DIKEMBALIKAN DI SINI =====
+          score--;
+          updateScore();
+          if (score < 0) endGame(false);
+        }
+        heart.remove();
+      });
+      
+      hearts.push(heart);
+      gameScreen.appendChild(heart);
+    }
+
+    function updateScore() {
+      scoreDisplay.textContent = `❤️: ${score}`;
+      scoreDisplay.classList.add('score-pulse');
+      setTimeout(() => scoreDisplay.classList.remove('score-pulse'), 200);
+    }
+
+    function miniConfetti(x, y) {
+      confetti({ particleCount: 30, spread: 40, origin: { x: x / window.innerWidth, y: y / window.innerHeight } });
+    }
+
+    function gameLoop() {
+      for (let i = hearts.length - 1; i >= 0; i--) {
+        const heart = hearts[i];
+        const playerRect = player.getBoundingClientRect();
+        const heartRect = heart.getBoundingClientRect();
+        if (
+          heartRect.bottom >= playerRect.top && heartRect.top <= playerRect.bottom &&
+          heartRect.left <= playerRect.right && heartRect.right >= playerRect.left
+        ) {
+          const x = (heartRect.left + heartRect.right) / 2;
+          const y = (heartRect.top + heartRect.bottom) / 2;
+          miniConfetti(x, y);
+          score++;
+          updateScore();
+          heart.remove();
+          hearts.splice(i, 1);
+          if (score >= targetScore) endGame(true);
+        }
+      }
+      if (!isGameOver) gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    function endGame(isWin) {
+      if (isGameOver) return;
+      isGameOver = true;
+      clearInterval(heartCreationInterval);
+      cancelAnimationFrame(gameLoopId);
+      hearts.forEach(h => h.remove());
+      hearts = [];
+
+      // Musik tidak dimatikan dan akan terus berlanjut
+      
+      if (isWin) {
+        messageText.innerHTML = "Yeayy kamu udah berhasil nangkap hati aku 💕 apakah sekarang kita sudah jadian??";
+        restartBtn.textContent = "Tangkap Lagi";
+        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+      } else {
+        messageText.textContent = "Yahh, kamu masih belum bisa menangkap hati aku 😢";
+        restartBtn.textContent = "Coba Lagi";
+      }
+      messageContainer.classList.remove('hidden');
+    }
+
+    // --- Event Tombol ---
+    playBtn.addEventListener('click', () => {
+      startScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      if (bgMusic.paused) { 
+        bgMusic.volume = 0;
+        bgMusic.play().catch(() => console.log("Autoplay diblokir."));
+        fadeAudio(bgMusic, 0.5, 1500);
+      }
+      startGame();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      // Tidak perlu ada fungsi fade in/out audio lagi karena musik terus berjalan
+      startGame();
+    });
+  </script>
+</body>
+</html>
